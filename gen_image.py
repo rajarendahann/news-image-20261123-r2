@@ -1,227 +1,265 @@
 #!/usr/bin/env python3
-"""Front-page news image generator - stdlib only."""
-import os, struct, zlib, datetime
+import os
+import struct
+import zlib
+import datetime
+import math
+import random
 
-W, H = 1600, 2000
-INK = (24, 24, 28); PAPER = (247, 245, 240)
-ACCENT = (179, 27, 27); GREY = (110, 110, 118)
-LIGHT = (226, 223, 216); SECT = (28, 60, 110)
-
-STORIES = [
-    ("WORLD", "Ceasefire talks resume in Geneva as both sides send envoys", 2),
-    ("WORLD", "Parliament in Berlin passes sweeping energy transition bill", 2),
-    ("WORLD", "Aid convoy reaches flood-hit provinces after weeks of delay", 2),
-    ("US", "Senate unveils bipartisan infrastructure funding framework", 2),
-    ("US", "Coastal cities adopt new storm-resilience building codes", 2),
-    ("US", "Federal appeals court weighs landmark data-privacy case", 2),
-    ("ASIA", "Tokyo unveils record robotics investment package", 2),
-    ("ASIA", "Monsoon relief operations expand across the subcontinent", 2),
-    ("ASIA", "Regional summit opens with trade and climate on agenda", 2),
-    ("TECH", "Open-source model releases sharpen cost competition", 2),
-    ("TECH", "Chipmakers report record demand for edge AI hardware", 2),
-    ("TECH", "Regulators publish first draft rules for agent software", 2),
-    ("BUSINESS", "Markets steady as central banks signal patient stance", 2),
-    ("BUSINESS", "Shipping rates ease as new routes settle into place", 2),
-    ("BUSINESS", "Retail groups report resilient holiday-season outlook", 2),
-    ("SPORT", "Title race tightens after dramatic weekend of fixtures", 2),
-    ("SPORT", "Underdogs stun champions in continental cup upsets", 2),
-    ("SPORT", "Marathon season opens with record field sizes", 2),
-    ("CULTURE", "Restored film classics return to festival screens", 2),
-    ("CULTURE", "New literary prize celebrates translated fiction", 2),
-    ("SCIENCE", "Deep-sea survey catalogs hundreds of new species", 2),
-    ("SCIENCE", "Green hydrogen pilot plant hits production milestone", 2),
-]
-REGIONS = {}
-for cat, headline, n in STORIES:
-    REGIONS.setdefault(cat, []).append(headline)
-
-COUNTERS = {"stories": len(STORIES), "regions": len(REGIONS), "sources": 14}
-
-FONT = {
- 'A':["01110","10001","10001","11111","10001","10001","10001"],
- 'B':["11110","10001","10001","11110","10001","10001","11110"],
- 'C':["01110","10001","10000","10000","10000","10001","01110"],
- 'D':["11110","10001","10001","10001","10001","10001","11110"],
- 'E':["11111","10000","10000","11110","10000","10000","11111"],
- 'F':["11111","10000","10000","11110","10000","10000","10000"],
- 'G':["01110","10001","10000","10111","10001","10001","01110"],
- 'H':["10001","10001","10001","11111","10001","10001","10001"],
- 'I':["11111","00100","00100","00100","00100","00100","11111"],
- 'J':["00111","00010","00010","00010","00010","10010","01100"],
- 'K':["10001","10010","10100","11000","10100","10010","10001"],
- 'L':["10000","10000","10000","10000","10000","10000","11111"],
- 'M':["10001","11011","10101","10101","10001","10001","10001"],
- 'N':["10001","11001","10101","10011","10001","10001","10001"],
- 'O':["01110","10001","10001","10001","10001","10001","01110"],
- 'P':["11110","10001","10001","11110","10000","10000","10000"],
- 'Q':["01110","10001","10001","10001","10101","10011","01101"],
- 'R':["11110","10001","10001","11110","10100","10010","10001"],
- 'S':["01111","10000","10000","01110","00001","00001","11110"],
- 'T':["11111","00100","00100","00100","00100","00100","00100"],
- 'U':["10001","10001","10001","10001","10001","10001","01110"],
- 'V':["10001","10001","10001","10001","10001","01010","00100"],
- 'W':["10001","10001","10001","10101","10101","11011","10001"],
- 'X':["10001","10001","01010","00100","01010","10001","10001"],
- 'Y':["10001","10001","01010","00100","00100","00100","00100"],
- 'Z':["11111","00001","00010","00100","01000","10000","11111"],
- '0':["01110","10001","10011","10101","11001","10001","01110"],
- '1':["00100","01100","00100","00100","00100","00100","01110"],
- '2':["01110","10001","00001","00110","01000","10000","11111"],
- '3':["11110","00001","00001","01110","00001","00001","11110"],
- '4':["00010","00110","01010","10010","11111","00010","00010"],
- '5':["11111","10000","11110","00001","00001","10001","01110"],
- '6':["01110","10000","10000","11110","10001","10001","01110"],
- '7':["11111","00001","00010","00100","01000","01000","01000"],
- '8':["01110","10001","10001","01110","10001","10001","01110"],
- '9':["01110","10001","10001","01111","00001","00001","01110"],
- ' ':["00000"]*7, '.':["00000","00000","00000","00000","00000","00110","00110"],
- ',':["00000","00000","00000","00000","00110","00100","01000"],
- '-':["00000","00000","00000","01110","00000","00000","00000"],
- ':':["00000","00110","00110","00000","00110","00110","00000"],
- '/':["00001","00010","00010","00100","01000","01000","10000"],
- "'":["00100","00100","00000","00000","00000","00000","00000"],
- '(':["00010","00100","01000","01000","01000","00100","00010"],
- ')':["01000","00100","00010","00010","00010","00100","01000"],
- '&':["01100","10010","10100","01000","10101","10010","01101"],
- '%':["10001","00010","00100","01000","00100","01000","10001"],
- '•':["00000","00000","01100","01100","00000","00000","00000"],
+# 5x7 Bitmap font for rendering text
+FONT_5X7 = {
+    ' ': [0, 0, 0, 0, 0, 0, 0],
+    'A': [0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11],
+    'B': [0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E],
+    'C': [0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E],
+    'D': [0x1E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1E],
+    'E': [0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F],
+    'F': [0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10],
+    'G': [0x0E, 0x11, 0x10, 0x17, 0x11, 0x11, 0x0E],
+    'H': [0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11],
+    'I': [0x0E, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E],
+    'J': [0x07, 0x02, 0x02, 0x02, 0x02, 0x12, 0x0C],
+    'K': [0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11],
+    'L': [0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F],
+    'M': [0x11, 0x1B, 0x15, 0x11, 0x11, 0x11, 0x11],
+    'N': [0x11, 0x19, 0x15, 0x13, 0x11, 0x11, 0x11],
+    'O': [0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E],
+    'P': [0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10],
+    'Q': [0x0E, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0D],
+    'R': [0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11],
+    'S': [0x0E, 0x11, 0x10, 0x0E, 0x01, 0x11, 0x0E],
+    'T': [0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04],
+    'U': [0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E],
+    'V': [0x11, 0x11, 0x11, 0x11, 0x11, 0x0A, 0x04],
+    'W': [0x11, 0x11, 0x11, 0x15, 0x15, 0x1B, 0x11],
+    'X': [0x11, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x11],
+    'Y': [0x11, 0x11, 0x0A, 0x04, 0x04, 0x04, 0x04],
+    'Z': [0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F],
+    '0': [0x0E, 0x13, 0x15, 0x15, 0x15, 0x19, 0x0E],
+    '1': [0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E],
+    '2': [0x0E, 0x11, 0x01, 0x06, 0x08, 0x10, 0x1F],
+    '3': [0x1F, 0x01, 0x02, 0x0E, 0x01, 0x11, 0x0E],
+    '4': [0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02],
+    '5': [0x1F, 0x10, 0x1E, 0x01, 0x01, 0x11, 0x0E],
+    '6': [0x0E, 0x10, 0x10, 0x1E, 0x11, 0x11, 0x0E],
+    '7': [0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08],
+    '8': [0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E],
+    '9': [0x0E, 0x11, 0x11, 0x0F, 0x01, 0x01, 0x0E],
+    ',': [0x00, 0x00, 0x00, 0x00, 0x06, 0x04, 0x08],
+    '.': [0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x06],
+    ':': [0x00, 0x06, 0x06, 0x00, 0x06, 0x06, 0x00],
+    '-': [0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00],
+    '/': [0x01, 0x02, 0x04, 0x08, 0x10, 0x00, 0x00],
+    '\'': [0x04, 0x04, 0x02, 0x00, 0x00, 0x00, 0x00],
+    '&': [0x0C, 0x12, 0x14, 0x08, 0x15, 0x12, 0x0D],
+    '?': [0x0E, 0x11, 0x01, 0x02, 0x04, 0x00, 0x04],
 }
 
-buf = bytearray()
-for _ in range(H * W * 3):
-    buf.extend(b'\xf7\xf5\xf0')
+def draw_rect_filled(img, x1, y1, x2, y2, color, W=1600, H=2000):
+    x1 = max(0, min(W - 1, x1))
+    x2 = max(0, min(W - 1, x2))
+    y1 = max(0, min(H - 1, y1))
+    y2 = max(0, min(H - 1, y2))
+    if x1 > x2 or y1 > y2:
+        return
+    r, g, b = color
+    for y in range(y1, y2 + 1):
+        row = img[y]
+        for x in range(x1, x2 + 1):
+            idx = x * 3
+            row[idx] = r
+            row[idx + 1] = g
+            row[idx + 2] = b
 
-def px(x, y, c):
-    if 0 <= x < W and 0 <= y < H:
-        i = (y * W + x) * 3
-        buf[i] = c[0]; buf[i+1] = c[1]; buf[i+2] = c[2]
+def draw_line(img, x1, y1, x2, y2, color, thickness=1, W=1600, H=2000):
+    if y1 == y2:
+        draw_rect_filled(img, min(x1, x2), y1 - thickness // 2, max(x1, x2), y1 + thickness // 2, color, W, H)
+    elif x1 == x2:
+        draw_rect_filled(img, x1 - thickness // 2, min(y1, y2), x1 + thickness // 2, max(y1, y2), color, W, H)
+    else:
+        dx = abs(x2 - x1)
+        dy = abs(y2 - y1)
+        sx = 1 if x1 < x2 else -1
+        sy = 1 if y1 < y2 else -1
+        err = dx - dy
+        x, y = x1, y1
+        while True:
+            draw_rect_filled(img, x, y, x + thickness - 1, y + thickness - 1, color, W, H)
+            if x == x2 and y == y2:
+                break
+            e2 = 2 * err
+            if e2 > -dy:
+                err -= dy
+                x += sx
+            if e2 < dx:
+                err += dx
+                y += sy
 
-def rect(x0, y0, x1, y1, c):
-    for y in range(max(0, y0), min(H, y1)):
-        for x in range(max(0, x0), min(W, x1)):
-            px(x, y, c)
-
-def hline(x0, x1, y, c, t=1):
-    rect(x0, y, x1, y + t, c)
-
-def text(x, y, s, c, scale=2):
+def draw_text(img, text, x, y, scale=1, color=(0, 0, 0), W=1600, H=2000):
     cx = x
-    for ch in s.upper():
-        g = FONT.get(ch, FONT[' '])
-        for r, row in enumerate(g):
-            for col, b in enumerate(row):
-                if b == '1':
-                    rect(cx + col*scale, y + r*scale, cx + col*scale + scale, y + r*scale + scale, c)
-        cx += 6 * scale
-    return cx
+    for ch in text.upper():
+        glyph = FONT_5X7.get(ch) or FONT_5X7['?']
+        for row_idx, row_val in enumerate(glyph):
+            for col_idx in range(5):
+                if (row_val >> (4 - col_idx)) & 1:
+                    rx = cx + col_idx * scale
+                    ry = y + row_idx * scale
+                    draw_rect_filled(img, rx, ry, rx + scale - 1, ry + scale - 1, color, W, H)
+        cx += (5 + 1) * scale
 
-def center(s, y, c, scale):
-    w = len(s) * 6 * scale
-    text(max(0, (W - w)//2), y, s, c, scale)
+def create_chunk(chunk_type, data):
+    length = struct.pack('>I', len(data))
+    crc = struct.pack('>I', zlib.crc32(chunk_type + data) & 0xffffffff)
+    return length + chunk_type + data + crc
 
-today = datetime.date.today().strftime("%B %-d, %Y")
+def write_png(filename, img, W, H):
+    signature = b'\x89PNG\r\n\x1a\n'
+    ihdr_data = struct.pack('>IIBBBBB', W, H, 8, 2, 0, 0, 0)
+    ihdr_chunk = create_chunk(b'IHDR', ihdr_data)
+    
+    raw_data = bytearray()
+    for row in img:
+        raw_data.append(0)
+        raw_data.extend(row)
+        
+    compressed = zlib.compress(raw_data, level=6)
+    idat_chunk = create_chunk(b'IDAT', compressed)
+    iend_chunk = create_chunk(b'IEND', b'')
+    
+    with open(filename, 'wb') as f:
+        f.write(signature)
+        f.write(ihdr_chunk)
+        f.write(idat_chunk)
+        f.write(iend_chunk)
 
-# masthead
-hline(40, W-40, 40, ACCENT, 6)
-center("THE FRONT PAGE", 90, INK, 9)
-center(today, 260, GREY, 5)
-center("%d STORIES  •  %d REGIONS  •  %d SOURCES" % (COUNTERS['stories'], COUNTERS['regions'], COUNTERS['sources']), 360, ACCENT, 3)
-hline(40, W-40, 430, INK, 4)
+def main():
+    random.seed(42)
+    W, H = 1600, 2000
+    
+    # White paper background
+    img = [bytearray(b'\xff' * (W * 3)) for _ in range(H)]
+    
+    margin = 80
+    
+    # Top metadata bar
+    draw_text(img, "VOL. CXXIV NO. 42", margin, margin - 15, scale=2, color=(70, 70, 70))
+    draw_text(img, "MONDAY, 23 NOVEMBER 2026", (W // 2) - 170, margin - 15, scale=2, color=(70, 70, 70))
+    draw_text(img, "PRICE: $2.00", W - margin - 180, margin - 15, scale=2, color=(70, 70, 70))
+    
+    draw_line(img, margin, margin + 12, W - margin, margin + 12, (0, 0, 0), thickness=1)
 
-# region sections: 2 columns of story cards
-y = 470
-pairs = list(REGIONS.items())
-cards = []
-ci = 0
-for cat, heads in pairs:
-    cards.append((cat, heads)); 
-# 3 big story cards (first 3 regions' first headlines)
-y0 = 470
-rect(40, y0, W-40, y0+180, (240, 236, 228))
-x = 60
-for k in range(3):
-    cat, heads = cards[k]
-    rect(x, y0+20, x+480, y0+160, (255, 253, 248))
-    text(x+20, y0+40, cat, ACCENT, 4)
-    words = heads[0].split()
-    lines, cur = [], ""
-    for w_ in words:
-        if len(cur)+len(w_)+1 <= 34: cur = (cur+" "+w_).strip()
-        else: lines.append(cur); cur = w_
-    lines.append(cur)
-    yy = y0+95
-    for ln in lines[:2]:
-        text(x+20, yy, ln, INK, 2); yy += 26
-    x += 500
-y = y0 + 220
+    # Enlarged Masthead Title: THE DAILY LEDGER
+    masthead = "THE DAILY LEDGER"
+    scale_m = 9
+    text_w = len(masthead) * 6 * scale_m
+    mx = (W - text_w) // 2
+    my = margin + 25
+    draw_text(img, masthead, mx, my, scale=scale_m, color=(0, 0, 0))
+    
+    # Sub-masthead byline / editorial info row
+    submeta_y = my + 7 * scale_m + 12
+    draw_text(img, "FOUNDED 1894 • THE VOICE OF GLOBAL COMMERCE & INDEPENDENT JOURNALISM", (W // 2) - 460, submeta_y, scale=2, color=(90, 90, 90))
+    
+    # Thin double rule below masthead
+    rule_y = submeta_y + 30
+    draw_line(img, margin, rule_y, W - margin, rule_y, (0, 0, 0), thickness=4)
+    draw_line(img, margin, rule_y + 6, W - margin, rule_y + 6, (0, 0, 0), thickness=1)
+    
+    # Red accent rule
+    accent_y = rule_y + 18
+    draw_line(img, margin, accent_y, W - margin, accent_y, (200, 30, 30), thickness=4)
+    
+    # Primary Headline & Byline row
+    headline_y = accent_y + 30
+    draw_text(img, "GLOBAL MARKETS REACH HISTORIC PEAK", margin, headline_y, scale=4, color=(0, 0, 0))
+    draw_text(img, "AS TECHNOLOGY GIANTS SURGE IN TRADING", margin, headline_y + 40, scale=4, color=(0, 0, 0))
+    
+    byline_y = headline_y + 88
+    draw_text(img, "BY J. A. VANCE, SENIOR FINANCIAL EDITOR", margin, byline_y, scale=2, color=(110, 110, 110))
+    
+    # Second Headline
+    sec_head_y = byline_y + 35
+    draw_text(img, "SECOND LEADING STORY: RENEWABLE ENERGY MILESTONE", margin, sec_head_y, scale=3, color=(20, 20, 20))
+    
+    sub_y = sec_head_y + 35
+    draw_text(img, "International consortium commits record capital to next-generation green infrastructure projects.", margin, sub_y, scale=2, color=(90, 90, 90))
+    
+    # Divider line before columns
+    div_y = sub_y + 35
+    draw_line(img, margin, div_y, W - margin, div_y, (0, 0, 0), thickness=2)
+    
+    # Three text columns with ragged right edges
+    col_y_start = div_y + 30
+    col_width = 410
+    col_gap = 45
+    num_cols = 3
+    total_cols_width = num_cols * col_width + (num_cols - 1) * col_gap
+    start_x = (W - total_cols_width) // 2
+    col_height = H - margin - col_y_start - 30
+    
+    col_titles = ["MARKET ANALYSIS", "GLOBAL TECH IMPACT", "ECONOMIC OUTLOOK"]
+    for c in range(num_cols):
+        cx = start_x + c * (col_width + col_gap)
+        cy = col_y_start
+        
+        draw_text(img, col_titles[c], cx, cy, scale=2, color=(0, 0, 0))
+        draw_line(img, cx, cy + 22, cx + col_width, cy + 22, (120, 120, 120), thickness=1)
+        
+        cy += 32
+        # Determine column bottom limit (leave room for lower right box in column 3)
+        current_col_height = col_height
+        if c == 2:
+            current_col_height = col_height - 350
+            
+        while cy < col_y_start + current_col_height:
+            # Ragged right edges: vary line lengths significantly
+            line_w = random.randint(col_width - 150, col_width)
+            draw_rect_filled(img, cx, cy, cx + line_w, cy + 6, (110, 110, 110))
+            cy += 14
+            if random.random() < 0.22:
+                cy += 12  # Paragraph gap
+                
+        if c < num_cols - 1:
+            sep_x = cx + col_width + col_gap // 2
+            draw_line(img, sep_x, col_y_start, sep_x, col_y_start + col_height, (210, 210, 210), thickness=1)
 
-# remaining regions: 3x3 grid of small cards
-rest = cards[3:12]
-for gi, (cat, heads) in enumerate(rest):
-    r_, c_ = divmod(gi, 3)
-    gx = 40 + c_*520; gy = y + r_*170
-    rect(gx, gy, gx+500, gy+150, (240, 236, 228))
-    rect(gx, gy, gx+12, gy+150, SECT)
-    text(gx+30, gy+18, cat, SECT, 3)
-    words = heads[0].split()
-    lines, cur = [], ""
-    for w_ in words:
-        if len(cur)+len(w_)+1 <= 36: cur = (cur+" "+w_).strip()
-        else: lines.append(cur); cur = w_
-    lines.append(cur)
-    yy = gy+62
-    for ln in lines[:3]:
-        text(gx+30, yy, ln, INK, 2); yy += 24
+    # Boxed Section moved to the lower right corner
+    box_x1 = start_x + 2 * (col_width + col_gap)
+    box_y1 = H - margin - 350
+    box_x2 = W - margin
+    box_y2 = H - margin - 20
+    
+    blue_header_color = (30, 90, 180)
+    draw_rect_filled(img, box_x1, box_y1, box_x2, box_y2, (240, 246, 255))
+    draw_line(img, box_x1, box_y1, box_x2, box_y1, blue_header_color, thickness=3)
+    draw_line(img, box_x1, box_y2, box_x2, box_y2, blue_header_color, thickness=3)
+    draw_line(img, box_x1, box_y1, box_x1, box_y2, blue_header_color, thickness=3)
+    draw_line(img, box_x2, box_y1, box_x2, box_y2, blue_header_color, thickness=3)
+    
+    banner_h = 35
+    draw_rect_filled(img, box_x1, box_y1, box_x2, box_y1 + banner_h, blue_header_color)
+    draw_text(img, "MARKET INDICES & WEATHER", box_x1 + 15, box_y1 + 10, scale=2, color=(255, 255, 255))
+    
+    bx = box_x1 + 20
+    by = box_y1 + banner_h + 20
+    box_items = [
+        "S&P 500: 5,912.45 (+1.2%)",
+        "NASDAQ: 18,850.10 (+1.8%)",
+        "DOW JONES: 43,450.20 (+0.5%)",
+        "FTSE 100: 8,240.12 (-0.3%)",
+        "WEATHER: SUNNY 72 F",
+    ]
+    for item in box_items:
+        draw_text(img, item, bx, by, scale=2, color=(20, 20, 20))
+        by += 28
 
-rows_used = (len(rest) + 2) // 3
-y = y + max(1, rows_used) * 170 + 40
+    # Output directory handling
+    output_dir = os.environ.get('MAKEFUN_OUTPUT_DIR', '.')
+    os.makedirs(output_dir, exist_ok=True)
+    out_path = os.path.join(output_dir, 'entry.png')
+    
+    write_png(out_path, img, W, H)
+    print(f"wrote entry.png {W} x {H}")
 
-# world map with dots (equirectangular-ish schematic)
-map_y = y; map_h = 320
-rect(40, map_y, W-40, map_y+map_h, (232, 236, 244))
-text(60, map_y+16, "WORLD AT A GLANCE", SECT, 3)
-import math
-# simple continent blobs
-for blob in [(150,60,420,200),(430,70,620,190),(640,150,760,260),(790,70,1010,190),(1040,90,1260,230),(1300,110,1560,280)]:
-    rect(blob[0]+40, blob[1]+map_y+40, blob[2]+40, blob[3]+map_y+40, (214, 220, 232))
-for cx_, cy_ in [(320,120),(520,100),(700,140),(980,110),(1200,160),(1380,130),(300,200),(760,220),(1100,210),(1420,240),(450,180),(880,180)]:
-    cx_ += 40; cy_ += map_y+40
-    rect(cx_-6, cy_-6, cx_+6, cy_+6, ACCENT)
-
-y = map_y + map_h + 40
-
-# ALSO-ON list
-text(40, y, "ALSO ON THE FRONT PAGE", ACCENT, 4)
-y += 60
-extras = ["Weather bureau forecasts colder week across northern plains",
-          "Transit agency adds late-night service on key metro lines",
-          "University team publishes open dataset on urban air quality"]
-for e in extras:
-    rect(40, y, W-40, y+56, (240, 236, 228))
-    rect(40, y, 52, y+56, ACCENT)
-    text(70, y+16, e, INK, 2)
-    y += 66
-
-# footer
-fy = H - 90
-hline(40, W-40, fy, INK, 3)
-center("DATE CHECK: %s  •  SOURCES: PUBLIC WIRE REPORTS (14)" % today, fy+30, GREY, 2)
-
-# ---- PNG encode ----
-def png_bytes():
-    raw = bytearray()
-    for row in range(H):
-        raw.append(0)
-        raw.extend(buf[row*W*3:(row+1)*W*3])
-    comp = zlib.compress(bytes(raw), 6)
-    def chunk(t, d):
-        c = struct.pack(">I", len(d)) + t + d
-        return c + struct.pack(">I", zlib.crc32(t + d) & 0xffffffff)
-    ihdr = struct.pack(">IIBBBBB", W, H, 8, 2, 0, 0, 0)
-    return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', ihdr) + chunk(b'IDAT', comp) + chunk(b'IEND', b'')
-
-out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
-os.makedirs(out_dir, exist_ok=True)
-with open(os.path.join(out_dir, "entry.png"), "wb") as f:
-    f.write(png_bytes())
-print("wrote entry.png", W, "x", H)
+if __name__ == '__main__':
+    main()
