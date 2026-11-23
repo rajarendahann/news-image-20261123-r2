@@ -17,7 +17,19 @@ def wrap_text(text, font, max_width, draw):
         lines.append(" ".join(current_line))
     return lines
 
-def generate_image(output_path="entry.png"):
+def generate_image(output_path=None):
+    if output_path is None:
+        out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
+        try:
+            os.makedirs(out_dir, exist_ok=True)
+            output_path = os.path.join(out_dir, "entry.png")
+            with open(output_path, "a"):
+                pass
+        except Exception:
+            out_dir = "."
+            os.makedirs(out_dir, exist_ok=True)
+            output_path = os.path.join(out_dir, "entry.png")
+
     width, height = 1024, 1024
     img = Image.new("RGB", (width, height), color="#FAF7F2")
     draw = ImageDraw.Draw(img)
@@ -238,7 +250,6 @@ def generate_image(output_path="entry.png"):
     draw.text((margin, y), footer3, fill="#5D6D7E", font=font_tiny)
 
     # Save output
-    os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else ".", exist_ok=True)
     img.save(output_path, "PNG", optimize=True)
     print(f"Successfully generated {output_path}")
 
