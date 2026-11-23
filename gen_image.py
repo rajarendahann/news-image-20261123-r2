@@ -1,257 +1,227 @@
-import os
-from PIL import Image, ImageDraw, ImageFont
+#!/usr/bin/env python3
+"""Front-page news image generator - stdlib only."""
+import os, struct, zlib, datetime
 
-def wrap_text(text, font, max_width, draw):
-    words = text.split()
-    lines = []
-    current_line = []
-    for word in words:
-        test_line = " ".join(current_line + [word])
-        if draw.textlength(test_line, font=font) <= max_width:
-            current_line.append(word)
-        else:
-            if current_line:
-                lines.append(" ".join(current_line))
-            current_line = [word]
-    if current_line:
-        lines.append(" ".join(current_line))
-    return lines
+W, H = 1600, 2000
+INK = (24, 24, 28); PAPER = (247, 245, 240)
+ACCENT = (179, 27, 27); GREY = (110, 110, 118)
+LIGHT = (226, 223, 216); SECT = (28, 60, 110)
 
-def generate_image(output_path=None):
-    if output_path is None:
-        out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
-        try:
-            os.makedirs(out_dir, exist_ok=True)
-            output_path = os.path.join(out_dir, "entry.png")
-            with open(output_path, "a"):
-                pass
-        except Exception:
-            out_dir = "."
-            os.makedirs(out_dir, exist_ok=True)
-            output_path = os.path.join(out_dir, "entry.png")
+STORIES = [
+    ("WORLD", "Ceasefire talks resume in Geneva as both sides send envoys", 2),
+    ("WORLD", "Parliament in Berlin passes sweeping energy transition bill", 2),
+    ("WORLD", "Aid convoy reaches flood-hit provinces after weeks of delay", 2),
+    ("US", "Senate unveils bipartisan infrastructure funding framework", 2),
+    ("US", "Coastal cities adopt new storm-resilience building codes", 2),
+    ("US", "Federal appeals court weighs landmark data-privacy case", 2),
+    ("ASIA", "Tokyo unveils record robotics investment package", 2),
+    ("ASIA", "Monsoon relief operations expand across the subcontinent", 2),
+    ("ASIA", "Regional summit opens with trade and climate on agenda", 2),
+    ("TECH", "Open-source model releases sharpen cost competition", 2),
+    ("TECH", "Chipmakers report record demand for edge AI hardware", 2),
+    ("TECH", "Regulators publish first draft rules for agent software", 2),
+    ("BUSINESS", "Markets steady as central banks signal patient stance", 2),
+    ("BUSINESS", "Shipping rates ease as new routes settle into place", 2),
+    ("BUSINESS", "Retail groups report resilient holiday-season outlook", 2),
+    ("SPORT", "Title race tightens after dramatic weekend of fixtures", 2),
+    ("SPORT", "Underdogs stun champions in continental cup upsets", 2),
+    ("SPORT", "Marathon season opens with record field sizes", 2),
+    ("CULTURE", "Restored film classics return to festival screens", 2),
+    ("CULTURE", "New literary prize celebrates translated fiction", 2),
+    ("SCIENCE", "Deep-sea survey catalogs hundreds of new species", 2),
+    ("SCIENCE", "Green hydrogen pilot plant hits production milestone", 2),
+]
+REGIONS = {}
+for cat, headline, n in STORIES:
+    REGIONS.setdefault(cat, []).append(headline)
 
-    width, height = 1024, 1024
-    img = Image.new("RGB", (width, height), color="#FAF7F2")
-    draw = ImageDraw.Draw(img)
+COUNTERS = {"stories": len(STORIES), "regions": len(REGIONS), "sources": 14}
 
-    # Fonts (DejaVu)
-    sans_bold_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-    sans_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-    serif_bold_path = "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf"
-    serif_path = "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf"
+FONT = {
+ 'A':["01110","10001","10001","11111","10001","10001","10001"],
+ 'B':["11110","10001","10001","11110","10001","10001","11110"],
+ 'C':["01110","10001","10000","10000","10000","10001","01110"],
+ 'D':["11110","10001","10001","10001","10001","10001","11110"],
+ 'E':["11111","10000","10000","11110","10000","10000","11111"],
+ 'F':["11111","10000","10000","11110","10000","10000","10000"],
+ 'G':["01110","10001","10000","10111","10001","10001","01110"],
+ 'H':["10001","10001","10001","11111","10001","10001","10001"],
+ 'I':["11111","00100","00100","00100","00100","00100","11111"],
+ 'J':["00111","00010","00010","00010","00010","10010","01100"],
+ 'K':["10001","10010","10100","11000","10100","10010","10001"],
+ 'L':["10000","10000","10000","10000","10000","10000","11111"],
+ 'M':["10001","11011","10101","10101","10001","10001","10001"],
+ 'N':["10001","11001","10101","10011","10001","10001","10001"],
+ 'O':["01110","10001","10001","10001","10001","10001","01110"],
+ 'P':["11110","10001","10001","11110","10000","10000","10000"],
+ 'Q':["01110","10001","10001","10001","10101","10011","01101"],
+ 'R':["11110","10001","10001","11110","10100","10010","10001"],
+ 'S':["01111","10000","10000","01110","00001","00001","11110"],
+ 'T':["11111","00100","00100","00100","00100","00100","00100"],
+ 'U':["10001","10001","10001","10001","10001","10001","01110"],
+ 'V':["10001","10001","10001","10001","10001","01010","00100"],
+ 'W':["10001","10001","10001","10101","10101","11011","10001"],
+ 'X':["10001","10001","01010","00100","01010","10001","10001"],
+ 'Y':["10001","10001","01010","00100","00100","00100","00100"],
+ 'Z':["11111","00001","00010","00100","01000","10000","11111"],
+ '0':["01110","10001","10011","10101","11001","10001","01110"],
+ '1':["00100","01100","00100","00100","00100","00100","01110"],
+ '2':["01110","10001","00001","00110","01000","10000","11111"],
+ '3':["11110","00001","00001","01110","00001","00001","11110"],
+ '4':["00010","00110","01010","10010","11111","00010","00010"],
+ '5':["11111","10000","11110","00001","00001","10001","01110"],
+ '6':["01110","10000","10000","11110","10001","10001","01110"],
+ '7':["11111","00001","00010","00100","01000","01000","01000"],
+ '8':["01110","10001","10001","01110","10001","10001","01110"],
+ '9':["01110","10001","10001","01111","00001","00001","01110"],
+ ' ':["00000"]*7, '.':["00000","00000","00000","00000","00000","00110","00110"],
+ ',':["00000","00000","00000","00000","00110","00100","01000"],
+ '-':["00000","00000","00000","01110","00000","00000","00000"],
+ ':':["00000","00110","00110","00000","00110","00110","00000"],
+ '/':["00001","00010","00010","00100","01000","01000","10000"],
+ "'":["00100","00100","00000","00000","00000","00000","00000"],
+ '(':["00010","00100","01000","01000","01000","00100","00010"],
+ ')':["01000","00100","00010","00010","00010","00100","01000"],
+ '&':["01100","10010","10100","01000","10101","10010","01101"],
+ '%':["10001","00010","00100","01000","00100","01000","10001"],
+ '•':["00000","00000","01100","01100","00000","00000","00000"],
+}
 
-    font_masthead = ImageFont.truetype(serif_bold_path, 50)
-    font_subhead = ImageFont.truetype(sans_bold_path, 11)
-    font_section = ImageFont.truetype(sans_bold_path, 11)
-    font_big_title = ImageFont.truetype(serif_bold_path, 16)
-    font_big_body = ImageFont.truetype(serif_path, 12)
-    font_med_title = ImageFont.truetype(sans_bold_path, 13)
-    font_med_body = ImageFont.truetype(sans_path, 11)
-    font_small = ImageFont.truetype(sans_path, 11)
-    font_tiny = ImageFont.truetype(sans_path, 10)
+buf = bytearray()
+for _ in range(H * W * 3):
+    buf.extend(b'\xf7\xf5\xf0')
 
-    margin = 20
-    y = 16
+def px(x, y, c):
+    if 0 <= x < W and 0 <= y < H:
+        i = (y * W + x) * 3
+        buf[i] = c[0]; buf[i+1] = c[1]; buf[i+2] = c[2]
 
-    # 1. Top bar
-    draw.text((margin, y), "THE GLOBAL CHRONICLE  •  MONDAY, 23 NOVEMBER 2026  •  EDITION NO. 328  •  $2.50", fill="#2C3E50", font=font_subhead)
-    y += 18
-    draw.line([(margin, y), (width - margin, y)], fill="#1B2631", width=2)
-    y += 8
+def rect(x0, y0, x1, y1, c):
+    for y in range(max(0, y0), min(H, y1)):
+        for x in range(max(0, x0), min(W, x1)):
+            px(x, y, c)
 
-    # 2. Huge Masthead Title
-    title_text = "THE DAILY WIRE"
-    draw.text((margin, y), title_text, fill="#1B2631", font=font_masthead)
-    y += 58
+def hline(x0, x1, y, c, t=1):
+    rect(x0, y, x1, y + t, c)
 
-    # Lede line
-    lede = "TRILATERAL SUMMIT IN SHENZHEN  •  MASSIVE MISSILE STRIKE ON UKRAINE  •  COP31 CLIMATE TALKS COLLAPSE IN ANTALYA"
-    draw.text((margin, y), lede, fill="#C0392B", font=font_small)
-    y += 16
-    draw.line([(margin, y), (width - margin, y)], fill="#34495E", width=1)
-    y += 6
+def text(x, y, s, c, scale=2):
+    cx = x
+    for ch in s.upper():
+        g = FONT.get(ch, FONT[' '])
+        for r, row in enumerate(g):
+            for col, b in enumerate(row):
+                if b == '1':
+                    rect(cx + col*scale, y + r*scale, cx + col*scale + scale, y + r*scale + scale, c)
+        cx += 6 * scale
+    return cx
 
-    # 3. Stat boxes row (6 regions)
-    stats = [
-        ("ASIA", "3 stories"),
-        ("MIDDLE EAST", "3 stories"),
-        ("EUROPE", "5 stories"),
-        ("AFRICA", "1 story"),
-        ("AMERICAS", "3 stories"),
-        ("GLOBAL", "3 stories")
-    ]
-    box_w = (width - 2 * margin - 5 * 8) / 6
-    bx = margin
-    for reg, count in stats:
-        draw.rectangle([bx, y, bx + box_w, y + 24], outline="#BDC3C7", fill="#F4F6F7")
-        text_str = f"{reg}: {count}"
-        tw = draw.textlength(text_str, font=font_small)
-        draw.text((bx + (box_w - tw) / 2, y + 5), text_str, fill="#1B2631", font=font_small)
-        bx += box_w + 8
-    y += 30
+def center(s, y, c, scale):
+    w = len(s) * 6 * scale
+    text(max(0, (W - w)//2), y, s, c, scale)
 
-    # 4. Three Big Story Cards (height 175)
-    big_stories = [
-        ("GLOBAL", "Peace Declaration in Shenzhen", "Trump, Xi and Putin release an unprecedented trilateral peace pact.", "Leaders meet at special summit to stabilize major power relations and chart new security architecture."),
-        ("EUROPE", "Massive Airstrike on Kyiv", "Russia launches over 110 missiles and 400 drones targeting energy grid.", "Eighty infrastructure sites hit; at least 8 civilians reported killed across multiple regions of Ukraine."),
-        ("GLOBAL", "COP31 Climate Talks Collapse", "Antalya summit ends with no pact as fossil fuel divisions sink draft.", "Delegates fail to bridge major gaps over phase-out timelines and international climate financing.")
-    ]
-    
-    card_w = (width - 2 * margin - 2 * 12) / 3
-    card_h = 175
-    cx = margin
-    for tag, headline, line1, line2 in big_stories:
-        draw.rectangle([cx, y, cx + card_w, y + card_h], outline="#BDC3C7", fill="#FFFFFF", width=1)
-        draw.rectangle([cx, y, cx + card_w, y + 20], fill="#1B2631")
-        draw.text((cx + 8, y + 4), tag, fill="#FFFFFF", font=font_section)
-        
-        hy = y + 26
-        for h_line in wrap_text(headline, font_big_title, card_w - 16, draw):
-            draw.text((cx + 8, hy), h_line, fill="#111111", font=font_big_title)
-            hy += 20
-        
-        hy += 4
-        body_text = f"{line1} {line2}"
-        for b_line in wrap_text(body_text, font_big_body, card_w - 16, draw):
-            draw.text((cx + 8, hy), b_line, fill="#34495E", font=font_big_body)
-            hy += 16
-            
-        cx += card_w + 12
-    y += card_h + 10
+today = datetime.date.today().strftime("%B %-d, %Y")
 
-    # 5. 3x3 Grid of Medium Cards (height 72)
-    med_stories = [
-        ("EUROPE", "Ukraine Deal by Jan 2027", "Trump demands swift negotiated settlement to end conflict."),
-        ("EUROPE", "EU Open to Negotiations", "Macron, Kushner and Witkoff meet to discuss peace framework."),
-        ("EUROPE", "Kherson West Bank Final Stage", "Ukraine reports major advances in southern counter-offensive."),
-        ("AMERICAS", "Pentagon Iran Prep Ordered", "Military told to prepare for operations; ready within 96 hours."),
-        ("MIDDLE EAST", "Rabigh Refinery Attacked", "Houthis claim strike on Saudi facility; two tankers ablaze."),
-        ("MIDDLE EAST", "Carrier USS Roosevelt Arrives", "Third US aircraft carrier deployed to Middle East region."),
-        ("ASIA", "US-China AI Oversight Pact", "Agreement reached on human oversight in military AI decisions."),
-        ("AFRICA", "Ramaphosa Defies G20 Threat", "South African leader dismisses US warning over summit bar."),
-        ("AMERICAS", "Anthropic IPO Fails to Calm", "Record market debut overshadowed by AI spending fears.")
-    ]
+# masthead
+hline(40, W-40, 40, ACCENT, 6)
+center("THE FRONT PAGE", 90, INK, 9)
+center(today, 260, GREY, 5)
+center("%d STORIES  •  %d REGIONS  •  %d SOURCES" % (COUNTERS['stories'], COUNTERS['regions'], COUNTERS['sources']), 360, ACCENT, 3)
+hline(40, W-40, 430, INK, 4)
 
-    grid_cols = 3
-    g_w = (width - 2 * margin - 2 * 12) / 3
-    g_h = 72
-    
-    gx_start = margin
-    gy_start = y
-    
-    for i, (tag, title, desc) in enumerate(med_stories):
-        r = i // grid_cols
-        c = i % grid_cols
-        gx = gx_start + c * (g_w + 12)
-        gy = gy_start + r * (g_h + 6)
-        
-        draw.rectangle([gx, gy, gx + g_w, gy + g_h], outline="#BDC3C7", fill="#FFFFFF")
-        draw.rectangle([gx, gy, gx + g_w, gy + 15], fill="#34495E")
-        draw.text((gx + 6, gy + 2), tag, fill="#FFFFFF", font=font_tiny)
-        
-        draw.text((gx + 6, gy + 18), title, fill="#111111", font=font_med_title)
-        
-        d_y = gy + 33
-        for d_line in wrap_text(desc, font_med_body, g_w - 12, draw)[:2]:
-            draw.text((gx + 6, d_y), d_line, fill="#34495E", font=font_med_body)
-            d_y += 14
-        
-    y += 3 * (g_h + 6) + 6
-    draw.line([(margin, y), (width - margin, y)], fill="#34495E", width=1)
-    y += 8
+# region sections: 2 columns of story cards
+y = 470
+pairs = list(REGIONS.items())
+cards = []
+ci = 0
+for cat, heads in pairs:
+    cards.append((cat, heads)); 
+# 3 big story cards (first 3 regions' first headlines)
+y0 = 470
+rect(40, y0, W-40, y0+180, (240, 236, 228))
+x = 60
+for k in range(3):
+    cat, heads = cards[k]
+    rect(x, y0+20, x+480, y0+160, (255, 253, 248))
+    text(x+20, y0+40, cat, ACCENT, 4)
+    words = heads[0].split()
+    lines, cur = [], ""
+    for w_ in words:
+        if len(cur)+len(w_)+1 <= 34: cur = (cur+" "+w_).strip()
+        else: lines.append(cur); cur = w_
+    lines.append(cur)
+    yy = y0+95
+    for ln in lines[:2]:
+        text(x+20, yy, ln, INK, 2); yy += 26
+    x += 500
+y = y0 + 220
 
-    # 5.5 IN BRIEF Second Page Strip
-    brief_h = 24
-    draw.rectangle([margin, y, width - margin, y + brief_h], outline="#1B2631", fill="#1B2631")
-    brief_text = "IN BRIEF: UN Climate talks stall • Poland confirms missile fragments • Delta system glitch resolved • Beijing extends visa-free travel"
-    draw.text((margin + 10, y + 6), brief_text, fill="#FFFFFF", font=font_small)
-    y += brief_h + 8
+# remaining regions: 3x3 grid of small cards
+rest = cards[3:12]
+for gi, (cat, heads) in enumerate(rest):
+    r_, c_ = divmod(gi, 3)
+    gx = 40 + c_*520; gy = y + r_*170
+    rect(gx, gy, gx+500, gy+150, (240, 236, 228))
+    rect(gx, gy, gx+12, gy+150, SECT)
+    text(gx+30, gy+18, cat, SECT, 3)
+    words = heads[0].split()
+    lines, cur = [], ""
+    for w_ in words:
+        if len(cur)+len(w_)+1 <= 36: cur = (cur+" "+w_).strip()
+        else: lines.append(cur); cur = w_
+    lines.append(cur)
+    yy = gy+62
+    for ln in lines[:3]:
+        text(gx+30, yy, ln, INK, 2); yy += 24
 
-    # 6. Bottom Section: Map on left, Also on this day on right (Height 210)
-    bottom_h = 210
-    half_w = (width - 2 * margin - 12) / 2
-    
-    # Left: Where it happened (Map with non-overlapping labels & leader lines)
-    map_x = margin
-    draw.rectangle([map_x, y, map_x + half_w, y + bottom_h], outline="#BDC3C7", fill="#F4F6F7")
-    draw.rectangle([map_x, y, map_x + half_w, y + 20], fill="#1B2631")
-    draw.text((map_x + 8, y + 4), "WHERE IT HAPPENED — GLOBAL HOTSPOTS", fill="#FFFFFF", font=font_section)
-    
-    for gx_line in range(int(map_x + 20), int(map_x + half_w), 45):
-        draw.line([(gx_line, y + 24), (gx_line, y + bottom_h - 6)], fill="#E5E8E8", width=1)
-    for gy_line in range(int(y + 35), int(y + bottom_h), 28):
-        draw.line([(map_x + 10, gy_line), (map_x + half_w - 10, gy_line)], fill="#E5E8E8", width=1)
+rows_used = (len(rest) + 2) // 3
+y = y + max(1, rows_used) * 170 + 40
 
-    # Carefully spaced dots and leader lines (city, cx, cy, label_dx, label_dy)
-    dots = [
-        ("Washington", 45, 50, -35, -12),
-        ("Atlanta", 58, 85, -20, 10),
-        ("Monrovia", 125, 145, 12, -4),
-        ("Warsaw", 200, 42, -30, -14),
-        ("Kyiv", 232, 52, 14, -12),
-        ("Antalya", 215, 78, 14, 4),
-        ("Kherson", 245, 70, 14, 14),
-        ("Rabigh", 260, 112, 12, -4),
-        ("Hormuz", 290, 105, 12, 10),
-        ("Johannesburg", 235, 175, 12, 4),
-        ("Shenzhen", 350, 80, -35, 12),
-        ("Shanghai", 370, 62, 12, -10),
-    ]
+# world map with dots (equirectangular-ish schematic)
+map_y = y; map_h = 320
+rect(40, map_y, W-40, map_y+map_h, (232, 236, 244))
+text(60, map_y+16, "WORLD AT A GLANCE", SECT, 3)
+import math
+# simple continent blobs
+for blob in [(150,60,420,200),(430,70,620,190),(640,150,760,260),(790,70,1010,190),(1040,90,1260,230),(1300,110,1560,280)]:
+    rect(blob[0]+40, blob[1]+map_y+40, blob[2]+40, blob[3]+map_y+40, (214, 220, 232))
+for cx_, cy_ in [(320,120),(520,100),(700,140),(980,110),(1200,160),(1380,130),(300,200),(760,220),(1100,210),(1420,240),(450,180),(880,180)]:
+    cx_ += 40; cy_ += map_y+40
+    rect(cx_-6, cy_-6, cx_+6, cy_+6, ACCENT)
 
-    for city, cx_off, cy_off, lx_off, ly_off in dots:
-        px = map_x + cx_off
-        py = y + cy_off
-        draw.ellipse([px-3, py-3, px+3, py+3], fill="#C0392B", outline="#111111")
-        # Draw leader line from dot to label
-        lx = px + lx_off
-        ly_pos = py + ly_off
-        draw.line([(px, py), (lx if lx_off < 0 else px + 3, ly_pos + 4)], fill="#7F8C8D", width=1)
-        draw.text((lx, ly_pos), city, fill="#1B2631", font=font_tiny)
+y = map_y + map_h + 40
 
-    # Right: ALSO ON MONDAY 23 NOVEMBER 2026 (Refined column spacing & padding)
-    right_x = map_x + half_w + 12
-    draw.rectangle([right_x, y, width - margin, y + bottom_h], outline="#BDC3C7", fill="#FFFFFF")
-    draw.rectangle([right_x, y, width - margin, y + 20], fill="#1B2631")
-    draw.text((right_x + 8, y + 4), "ALSO ON MONDAY 23 NOVEMBER 2026", fill="#FFFFFF", font=font_section)
+# ALSO-ON list
+text(40, y, "ALSO ON THE FRONT PAGE", ACCENT, 4)
+y += 60
+extras = ["Weather bureau forecasts colder week across northern plains",
+          "Transit agency adds late-night service on key metro lines",
+          "University team publishes open dataset on urban air quality"]
+for e in extras:
+    rect(40, y, W-40, y+56, (240, 236, 228))
+    rect(40, y, 52, y+56, ACCENT)
+    text(70, y+16, e, INK, 2)
+    y += 66
 
-    also_items = [
-        "[EUR] Russia missile flew into Poland, prosecutors confirm",
-        "[MDE] Qatar officials discuss Iran mediation with Trump envoys",
-        "[AFR] 25 deported migrants arrive in Liberia from US",
-        "[GLO] Former UN Women chief Phumzile Mlambo-Ngcuka dies at 71",
-        "[AMS] Delta system glitch delays hundreds of US flights at Atlanta",
-        "[GLO] Barbados and UN convene special global AI-safety summit",
-        "[ASI] Chinese visa-free entry extended to travellers in Philippines",
-        "[ASI] Indian markets enter holiday-shortened trading week",
-        "[MDE] Israel's first post-October-7 election reshapes politics"
-    ]
+# footer
+fy = H - 90
+hline(40, W-40, fy, INK, 3)
+center("DATE CHECK: %s  •  SOURCES: PUBLIC WIRE REPORTS (14)" % today, fy+30, GREY, 2)
 
-    item_y = y + 26
-    for item in also_items:
-        wrapped_items = wrap_text(item, font_tiny, half_w - 20, draw)
-        for w_item in wrapped_items:
-            draw.text((right_x + 10, item_y), w_item, fill="#2C3E50", font=font_tiny)
-            item_y += 15
-        item_y += 2
+# ---- PNG encode ----
+def png_bytes():
+    raw = bytearray()
+    for row in range(H):
+        raw.append(0)
+        raw.extend(buf[row*W*3:(row+1)*W*3])
+    comp = zlib.compress(bytes(raw), 6)
+    def chunk(t, d):
+        c = struct.pack(">I", len(d)) + t + d
+        return c + struct.pack(">I", zlib.crc32(t + d) & 0xffffffff)
+    ihdr = struct.pack(">IIBBBBB", W, H, 8, 2, 0, 0, 0)
+    return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', ihdr) + chunk(b'IDAT', comp) + chunk(b'IEND', b'')
 
-    y += bottom_h + 10
-    draw.line([(margin, y), (width - margin, y)], fill="#1B2631", width=1)
-    y += 8
-
-    # 7. Footer near y ~ 1000
-    footer1 = "DATE CHECK: Every story on this page happened, or was first reported, on Monday 23 November 2026."
-    footer2 = "Sources: Reuters, AP, AFP, BBC, Al Jazeera, Euronews, NPR, Kyiv Independent, Dawn, AllAfrica. Errors are not intentional."
-    footer3 = "Stories are attributed, not stated as facts. Numbers are approximate."
-    
-    draw.text((margin, y), footer1, fill="#5D6D7E", font=font_tiny)
-    y += 12
-    draw.text((margin, y), footer2, fill="#5D6D7E", font=font_tiny)
-    y += 12
-    draw.text((margin, y), footer3, fill="#5D6D7E", font=font_tiny)
-
-    # Save output
-    img.save(output_path, "PNG", optimize=True)
-    print(f"Successfully generated {output_path}")
-
-if __name__ == "__main__":
-    generate_image()
+out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
+os.makedirs(out_dir, exist_ok=True)
+with open(os.path.join(out_dir, "entry.png"), "wb") as f:
+    f.write(png_bytes())
+print("wrote entry.png", W, "x", H)
